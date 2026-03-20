@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // This rule allows anyone with your Firestore database reference to view, edit,
+    // and delete all data in your Firestore database. It is useful for getting
+    // started, but it is configured to expire after 30 days because it
+    // leaves your app open to attackers. At that time, all client
+    // requests to your Firestore database will be denied.
+    //
+    // Make sure to write security rules for your app before that time, or else
+    // all client requests to your Firestore database will be denied until you Update
+    // your rules
+    match /{document=**} {
+      allow read, write: if request.time < timestamp.date(2025, 10, 27);
+    }
+    
+    // Quizzes collection
+    match /quizzes/{quizId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == resource.data.mentorId;
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.mentorId;
+      allow delete: if request.auth != null && 
+        request.auth.uid == resource.data.mentorId;
+    }
+    
+    // Quiz attempts collection
+    match /quizAttempts/{attemptId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Sessions collection
+    match /sessions/{sessionId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.mentorId || 
+         request.auth.uid == resource.data.learnerId);
+      allow create: if request.auth != null && 
+        (request.auth.uid == request.resource.data.mentorId || 
+         request.auth.uid == request.resource.data.learnerId);
+    }
+    
+    // Users collection - users can read/write their own profile
+    // Also allow updating averageRating field for mentors (when being rated)
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      // Users can fully write their own profile
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      // Allow updating only averageRating and updatedAt fields for other users (when submitting ratings)
+      // Using merge: true, so we check that only these fields are being changed
+      allow update: if request.auth != null && 
+        (request.auth.uid == userId || 
+         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['averageRating', 'updatedAt'])));
+    }
+    
+    // Ratings collection - learners can create ratings, anyone can read
+    match /ratings/{ratingId} {
+      // Anyone authenticated can read ratings
+      allow read: if request.auth != null;
+      // Learners can create ratings where they are the learner
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.learnerId;
+      // No updates or deletes allowed
+      allow update, delete: if false;
+    }
+    
+    // Skills collection (public read, authenticated write)
+    match /skills/{skillId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Matches collection
+    match /matches/{matchId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.user1Id || 
+         request.auth.uid == resource.data.user2Id);
+      allow create: if request.auth != null && 
+        (request.auth.uid == request.resource.data.user1Id || 
+         request.auth.uid == request.resource.data.user2Id);
+    }
+  }
+}
